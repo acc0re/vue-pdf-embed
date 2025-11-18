@@ -11,7 +11,6 @@ import type {
 
 import type { PasswordRequestParams, Source } from './types'
 import {
-  addPrintStyles,
   createPrintIframe,
   downloadPdf,
   emptyElement,
@@ -21,56 +20,19 @@ import { useVuePdfEmbed } from './composables'
 
 const props = withDefaults(
   defineProps<{
-    /**
-     * Whether to enable an annotation layer.
-     */
     annotationLayer?: boolean
-    /**
-     * Desired page height.
-     */
     height?: number
-    /**
-     * Root element identifier (inherited by page containers with page number
-     * postfixes).
-     */
     id?: string
-    /**
-     * Path for annotation icons, including trailing slash.
-     */
     imageResourcesPath?: string
-    /**
-     * Document navigation service.
-     */
     linkService?: PDFLinkService
-    /**
-     * Page number(s) to display.
-     */
     page?: number | number[]
-    /**
-     * Desired page rotation angle.
-     */
     rotation?: number
-    /**
-     * Desired ratio of canvas size to document size.
-     */
     scale?: number
-    /**
-     * Source of the document to display.
-     */
     source: Source
-    /**
-     * Whether to enable a text layer.
-     */
     textLayer?: boolean
-    /**
-     * Desired page width.
-     */
     width?: number
   }>(),
-  {
-    rotation: 0,
-    scale: 1,
-  }
+  { rotation: 0, scale: 1 }
 )
 
 const emit = defineEmits<{
@@ -98,18 +60,13 @@ const { doc } = useVuePdfEmbed({
   onPasswordRequest({ callback, isWrongPassword }) {
     emit('password-requested', { callback, isWrongPassword })
   },
-  onProgress: (progressParams) => {
-    emit('progress', progressParams)
-  },
+  onProgress: (progressParams) => emit('progress', progressParams),
   source: toRef(props, 'source'),
 })
 
 const linkService = computed(() => {
-  if (!doc.value || !props.annotationLayer) {
-    return null
-  } else if (props.linkService) {
-    return props.linkService
-  }
+  if (!doc.value || !props.annotationLayer) return null
+  if (props.linkService) return props.linkService
 
   const service = new PDFLinkService()
   service.setDocument(doc.value)
@@ -121,28 +78,15 @@ const linkService = computed(() => {
   return service
 })
 
-/**
- * Downloads the PDF document.
- * @param filename - Predefined filename to save.
- */
 const download = async (filename: string) => {
-  if (!doc.value) {
-    return
-  }
-
+  if (!doc.value) return
   const data = await doc.value.getData()
   const metadata = await doc.value.getMetadata()
   const suggestedFilename =
-    // @ts-expect-error: contentDispositionFilename is not typed
     filename ?? metadata.contentDispositionFilename ?? ''
   downloadPdf(data, suggestedFilename)
 }
 
-/**
- * Returns an array of the actual page width and height based on props and
- * aspect ratio.
- * @param ratio - Page aspect ratio.
- */
 const getPageDimensions = (ratio: number): [number, number] => {
   let width: number
   let height: number
@@ -158,16 +102,9 @@ const getPageDimensions = (ratio: number): [number, number] => {
   return [width, height]
 }
 
-/**
- * Prints a PDF document via the browser interface.
- * @param dpi - Print resolution.
- * @param filename - Predefined filename to save.
- * @param allPages - Whether to ignore the page prop and print all pages.
- */
+// -------- Angepasste Druckfunktion --------
 const print = async (dpi = 300, filename = '', allPages = false) => {
-  if (!doc.value) {
-    return
-  }
+  if (!doc.value) return
 
   const printUnits = dpi / 72
   const styleUnits = 96 / 72
@@ -176,74 +113,65 @@ const print = async (dpi = 300, filename = '', allPages = false) => {
   let title: string | undefined
 
   try {
-    container = window.document.createElement('div')
+    container = document.createElement('div')
     container.style.display = 'none'
-    window.document.body.appendChild(container)
+    document.body.appendChild(container)
     iframe = await createPrintIframe(container)
 
-    const pageNums =
+    const pagesToPrint =
       props.page && !allPages
         ? Array.isArray(props.page)
           ? props.page
           : [props.page]
         : [...Array(doc.value.numPages + 1).keys()].slice(1)
 
-    await Promise.all(
-      pageNums.map(async (pageNum, i) => {
-        const page = await doc.value!.getPage(pageNum)
-        const viewport = page.getViewport({
-          scale: 1,
-          rotation: 0,
-        })
+    for (let i = 0; i < pagesToPrint.length; i++) {
+      const pageNum = pagesToPrint[i]
+      const page = await doc.value.getPage(pageNum)
+      const viewport = page.getViewport({ scale: 1, rotation: 0 })
+      //	const isLandscape = viewport.width > viewport.height
 
-        if (i === 0) {
-          const sizeX = (viewport.width * printUnits) / styleUnits
-          const sizeY = (viewport.height * printUnits) / styleUnits
-          addPrintStyles(iframe, sizeX, sizeY)
-        }
+      if (i === 0) {
+        // @page CSS für Hoch- und Querformat dynamisch
+        const styleWidth = (viewport.width * printUnits) / styleUnits
+        const styleHeight = (viewport.height * printUnits) / styleUnits
+        const style = iframe.contentDocument!.createElement('style')
+        style.textContent = `@page { size: ${styleWidth}px ${styleHeight}px; margin:0; }`
+        iframe.contentDocument!.head.appendChild(style)
+      }
 
-        const canvas = window.document.createElement('canvas')
-        canvas.width = viewport.width * printUnits
-        canvas.height = viewport.height * printUnits
-        container.appendChild(canvas)
-        const canvasClone = canvas.cloneNode() as HTMLCanvasElement
-        iframe.contentWindow!.document.body.appendChild(canvasClone)
+      const canvas = document.createElement('canvas')
+      canvas.width = viewport.width * printUnits
+      canvas.height = viewport.height * printUnits
+      const ctx = canvas.getContext('2d')!
+      await page.render({
+        canvasContext: ctx,
+        intent: 'print',
+        transform: [printUnits, 0, 0, printUnits, 0, 0],
+        viewport,
+      }).promise
 
-        await page.render({
-          canvasContext: canvas.getContext('2d')!,
-          intent: 'print',
-          transform: [printUnits, 0, 0, printUnits, 0, 0],
-          viewport,
-        }).promise
-
-        canvasClone.getContext('2d')!.drawImage(canvas, 0, 0)
-      })
-    )
+      // Direkt anhängen statt cloneNode, verhindert Leerseiten
+      iframe.contentDocument!.body.appendChild(canvas)
+    }
 
     if (filename) {
-      title = window.document.title
-      window.document.title = filename
+      title = document.title
+      document.title = filename
     }
 
     iframe.contentWindow?.focus()
     iframe.contentWindow?.print()
   } finally {
-    if (title) {
-      window.document.title = title
-    }
-
-    releaseChildCanvases(container!)
-    container!.parentNode?.removeChild(container!)
+    if (title) document.title = title
+    releaseChildCanvases(container)
+    container.parentNode?.removeChild(container)
   }
 }
 
-/**
- * Renders the PDF document as canvas element(s) and additional layers.
- */
+// -------- Rendering wie gehabt --------
 const render = async () => {
-  if (!doc.value || renderingController?.isAborted) {
-    return
-  }
+  if (!doc.value || renderingController?.isAborted) return
 
   try {
     pageNums.value = props.page
@@ -255,10 +183,8 @@ const render = async () => {
 
     await Promise.all(
       pageNums.value.map(async (pageNum, i) => {
-        const page = await doc.value!.getPage(pageNum)
-        if (renderingController?.isAborted) {
-          return
-        }
+        const page = await doc.value.getPage(pageNum)
+        if (renderingController?.isAborted) return
         const pageRotation =
           ((props.rotation % 90 === 0 ? props.rotation : 0) + page.rotate) % 360
         const [canvas, div1, div2] = Array.from(
@@ -280,7 +206,6 @@ const render = async () => {
         })
 
         pageScales.value[i] = pageScale
-
         canvas.style.display = 'block'
         canvas.style.width = cssWidth
         canvas.style.height = cssHeight
@@ -297,23 +222,14 @@ const render = async () => {
 
         if (props.textLayer) {
           renderTasks.push(
-            renderPageTextLayer(
-              page,
-              viewport.clone({
-                dontFlip: true,
-              }),
-              div1
-            )
+            renderPageTextLayer(page, viewport.clone({ dontFlip: true }), div1)
           )
         }
-
         if (props.annotationLayer) {
           renderTasks.push(
             renderPageAnnotationLayer(
               page,
-              viewport.clone({
-                dontFlip: true,
-              }),
+              viewport.clone({ dontFlip: true }),
               div2 || div1
             )
           )
@@ -323,25 +239,14 @@ const render = async () => {
       })
     )
 
-    if (!renderingController?.isAborted) {
-      emit('rendered')
-    }
+    if (!renderingController?.isAborted) emit('rendered')
   } catch (e) {
     pageNums.value = []
     pageScales.value = []
-
-    if (!renderingController?.isAborted) {
-      emit('rendering-failed', e as Error)
-    }
+    if (!renderingController?.isAborted) emit('rendering-failed', e as Error)
   }
 }
 
-/**
- * Renders the page content.
- * @param page - Page proxy.
- * @param viewport - Page viewport.
- * @param canvas - HTML canvas.
- */
 const renderPage = async (
   page: PDFPageProxy,
   viewport: PageViewport,
@@ -349,18 +254,10 @@ const renderPage = async (
 ) => {
   canvas.width = viewport.width
   canvas.height = viewport.height
-  await page.render({
-    canvasContext: canvas.getContext('2d')!,
-    viewport,
-  }).promise
+  await page.render({ canvasContext: canvas.getContext('2d')!, viewport })
+    .promise
 }
 
-/**
- * Renders the annotation layer for the specified page.
- * @param page - Page proxy.
- * @param viewport - Page viewport.
- * @param container - HTML container.
- */
 const renderPageAnnotationLayer = async (
   page: PDFPageProxy,
   viewport: PageViewport,
@@ -386,12 +283,6 @@ const renderPageAnnotationLayer = async (
   })
 }
 
-/**
- * Renders the text layer for the specified page.
- * @param page - Page proxy.
- * @param viewport - Page viewport.
- * @param container - HTML container.
- */
 const renderPageTextLayer = async (
   page: PDFPageProxy,
   viewport: PageViewport,
@@ -408,13 +299,10 @@ const renderPageTextLayer = async (
 watch(
   doc,
   (newDoc) => {
-    if (newDoc) {
-      emit('loaded', newDoc)
-    }
+    if (newDoc) emit('loaded', newDoc)
   },
   { immediate: true }
 )
-
 watch(
   () => [
     doc.value,
@@ -428,21 +316,15 @@ watch(
     props.width,
   ],
   async ([newDoc]) => {
-    if (newDoc) {
-      if (renderingController) {
-        renderingController.isAborted = true
-        await renderingController.promise
-      }
-
-      releaseChildCanvases(root.value)
-      renderingController = {
-        isAborted: false,
-        promise: render(),
-      }
-
+    if (!newDoc) return
+    if (renderingController) {
+      renderingController.isAborted = true
       await renderingController.promise
-      renderingController = null
     }
+    releaseChildCanvases(root.value)
+    renderingController = { isAborted: false, promise: render() }
+    await renderingController.promise
+    renderingController = null
   },
   { immediate: true }
 )
@@ -451,33 +333,22 @@ onBeforeUnmount(() => {
   releaseChildCanvases(root.value)
 })
 
-defineExpose({
-  doc,
-  download,
-  print,
-})
+defineExpose({ doc, download, print })
 </script>
 
 <template>
   <div :id="id" ref="root" class="vue-pdf-embed">
     <div v-for="(pageNum, i) in pageNums" :key="pageNum">
       <slot name="before-page" :page="pageNum" />
-
       <div
         :id="id && `${id}-${pageNum}`"
         class="vue-pdf-embed__page"
-        :style="{
-          '--scale-factor': pageScales[i],
-          position: 'relative',
-        }"
+        :style="{ '--scale-factor': pageScales[i], position: 'relative' }"
       >
         <canvas />
-
         <div v-if="textLayer" class="textLayer" />
-
         <div v-if="annotationLayer" class="annotationLayer" />
       </div>
-
       <slot name="after-page" :page="pageNum" />
     </div>
   </div>
