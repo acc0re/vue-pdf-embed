@@ -180,7 +180,8 @@ const print = async (dpi = 300, filename = '', allPages = false) => {
       const pageNum = pagesToPrint[i]
       if (pageNum == null) continue
       const page = await doc.value.getPage(pageNum)
-      const viewport = page.getViewport({ scale: 1, rotation: 0 })
+      const printScale = dpi / 72
+      const viewport = page.getViewport({ scale: printScale, rotation: 0 })
 
       if (i === 0) {
         const styleWidth = (viewport.width * printUnits) / styleUnits
@@ -191,8 +192,8 @@ const print = async (dpi = 300, filename = '', allPages = false) => {
       }
 
       const canvas = document.createElement('canvas')
-      canvas.width = viewport.width * printUnits
-      canvas.height = viewport.height * printUnits
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
       const ctx = canvas.getContext('2d')!
       await page.render({
         canvasContext: ctx,
