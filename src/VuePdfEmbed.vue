@@ -155,78 +155,71 @@ const getPageDimensions = (ratio: number): [number, number] => {
  * @param allPages - Whether to ignore the page prop and print all pages.
  */
 const print = async (dpi = 300, filename = '', allPages = false) => {
-  if (!doc.value) return;
+  if (!doc.value) return
 
-  const printUnits = dpi / 72;
-  const styleUnits = 96 / 72;
-
-  let container: HTMLDivElement | null = null;
-  let iframe: HTMLIFrameElement;
-  let title: string | undefined;
+  const printUnits = dpi / 72
+  const styleUnits = 96 / 72
+  let container: HTMLDivElement | null = null
+  let iframe: HTMLIFrameElement
+  let title: string | undefined
 
   try {
-    container = document.createElement('div');
-    container.style.display = 'none';
-    document.body.appendChild(container);
-    iframe = await createPrintIframe(container);
+    container = document.createElement('div')
+    container.style.display = 'none'
+    document.body.appendChild(container)
+    iframe = await createPrintIframe(container)
 
     const pagesToPrint =
       props.page && !allPages
         ? Array.isArray(props.page)
           ? props.page
           : [props.page]
-        : [...Array(doc.value.numPages + 1).keys()].slice(1);
+        : [...Array(doc.value.numPages + 1).keys()].slice(1)
 
     for (let i = 0; i < pagesToPrint.length; i++) {
-      const pageNum = pagesToPrint[i];
-      if (pageNum == null) continue;
-
-      const page = await doc.value.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 1, rotation: 0 });
+      const pageNum = pagesToPrint[i]
+      if (pageNum == null) continue
+      const page = await doc.value.getPage(pageNum)
+      const printScale = dpi / 72
+      const viewport = page.getViewport({ scale: printScale, rotation: 0 })
 
       if (i === 0) {
-        const styleWidth = (viewport.width * printUnits) / styleUnits;
-        const styleHeight = (viewport.height * printUnits) / styleUnits;
-        const style = iframe.contentDocument!.createElement('style');
-        style.textContent = `@page { size: ${styleWidth}px ${styleHeight}px; margin:0; }`;
-        iframe.contentDocument!.head.appendChild(style);
+        const styleWidth = (viewport.width * printUnits) / styleUnits
+        const styleHeight = (viewport.height * printUnits) / styleUnits
+        const style = iframe.contentDocument!.createElement('style')
+        style.textContent = `@page { size: ${styleWidth}px ${styleHeight}px; margin:0; }`
+        iframe.contentDocument!.head.appendChild(style)
       }
 
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.floor(viewport.width * printUnits);
-      canvas.height = Math.floor(viewport.height * printUnits);
-
-      const ctx = canvas.getContext('2d')!;
-      ctx.imageSmoothingEnabled = false; // scharfe Kanten
-
+      const canvas = document.createElement('canvas')
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d')!
       await page.render({
         canvasContext: ctx,
-        viewport: page.getViewport({ scale: printUnits }),
         intent: 'print',
-      }).promise;
+        transform: [printUnits, 0, 0, printUnits, 0, 0],
+        viewport,
+      }).promise
 
-      canvas.style.width = `${(viewport.width * styleUnits)}px`;
-      canvas.style.height = `${(viewport.height * styleUnits)}px`;
-
-      iframe.contentDocument!.body.appendChild(canvas);
+      iframe.contentDocument!.body.appendChild(canvas)
     }
 
     if (filename) {
-      title = document.title;
-      document.title = filename;
+      title = document.title
+      document.title = filename
     }
 
-    iframe.contentWindow?.focus();
-    iframe.contentWindow?.print();
+    iframe.contentWindow?.focus()
+    iframe.contentWindow?.print()
   } finally {
-    if (title) document.title = title;
+    if (title) document.title = title
     if (container) {
-      releaseChildCanvases(container);
-      container.parentNode?.removeChild(container);
+      releaseChildCanvases(container)
+      container.parentNode?.removeChild(container)
     }
   }
-};
-
+}
 
 /**
  * Renders the PDF document as canvas element(s) and additional layers.
