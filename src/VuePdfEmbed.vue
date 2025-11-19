@@ -154,7 +154,7 @@ const getPageDimensions = (ratio: number): [number, number] => {
  * @param filename - Predefined filename to save.
  * @param allPages - Whether to ignore the page prop and print all pages.
  */
-const print = async (dpi = 300, filename = '', allPages = false) => {
+const print = async (dpi = 600, filename = '', allPages = false) => {
   if (!doc.value) return
 
   const printUnits = dpi / 72
