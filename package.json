@@ -1,6 +1,6 @@
 {
   "name": "@acc0re/vue-pdf-embed",
-  "version": "2.1.9",
+  "version": "2.2.2",
   "description": "PDF embed component for Vue",
   "keywords": [
     "vue",
