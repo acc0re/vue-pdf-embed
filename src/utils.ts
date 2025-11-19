@@ -46,22 +46,26 @@ export function createPrintIframe(
 
 // @internal
 export function downloadPdf(data: Uint8Array, filename: string) {
-  const url = URL.createObjectURL(
-    new Blob([data], {
-      type: 'application/pdf',
-    })
-  )
+  // Daten in ein reguläres Uint8Array mit ArrayBuffer konvertieren
+  const buffer = data.buffer instanceof ArrayBuffer ? data : new Uint8Array(data).buffer
+  const blob = new Blob([new Uint8Array(buffer)], {
+    type: 'application/pdf',
+  })
+
+  const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = filename
   anchor.style.display = 'none'
-  document.body.append(anchor)
+  document.body.appendChild(anchor)
   anchor.click()
   setTimeout(() => {
     URL.revokeObjectURL(url)
     document.body.removeChild(anchor)
   }, 1000)
 }
+
+
 
 // @internal
 export function emptyElement(el?: HTMLElement | null) {

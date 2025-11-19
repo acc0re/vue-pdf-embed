@@ -124,7 +124,7 @@ const download = async (filename: string) => {
   const data = await doc.value.getData()
   const metadata = await doc.value.getMetadata()
   const suggestedFilename =
-    filename ?? metadata.contentDispositionFilename ?? ''
+    filename ?? (metadata as any).contentDispositionFilename ?? ''
   downloadPdf(data, suggestedFilename)
 }
 
@@ -159,7 +159,7 @@ const print = async (dpi = 300, filename = '', allPages = false) => {
 
   const printUnits = dpi / 72
   const styleUnits = 96 / 72
-  let container: HTMLDivElement
+  let container: HTMLDivElement | null = null
   let iframe: HTMLIFrameElement
   let title: string | undefined
 
@@ -178,9 +178,9 @@ const print = async (dpi = 300, filename = '', allPages = false) => {
 
     for (let i = 0; i < pagesToPrint.length; i++) {
       const pageNum = pagesToPrint[i]
+      if (pageNum == null) continue
       const page = await doc.value.getPage(pageNum)
       const viewport = page.getViewport({ scale: 1, rotation: 0 })
-      //const isLandscape = viewport.width > viewport.height
 
       if (i === 0) {
         const styleWidth = (viewport.width * printUnits) / styleUnits
@@ -213,8 +213,10 @@ const print = async (dpi = 300, filename = '', allPages = false) => {
     iframe.contentWindow?.print()
   } finally {
     if (title) document.title = title
-    releaseChildCanvases(container)
-    container.parentNode?.removeChild(container)
+    if (container) {
+      releaseChildCanvases(container)
+      container.parentNode?.removeChild(container)
+    }
   }
 }
 
@@ -234,18 +236,26 @@ const render = async () => {
 
     await Promise.all(
       pageNums.value.map(async (pageNum, i) => {
-        const page = await doc.value.getPage(pageNum)
+        const page = await doc.value!.getPage(pageNum)
         if (renderingController?.isAborted) return
 
         const pageRotation =
           ((props.rotation % 90 === 0 ? props.rotation : 0) + page.rotate) % 360
-        const [canvas, div1, div2] = Array.from(
-          root.value!.getElementsByClassName('vue-pdf-embed__page')[i].children
-        ) as [HTMLCanvasElement, HTMLDivElement, HTMLDivElement]
+        const pageElement = root.value?.getElementsByClassName(
+          'vue-pdf-embed__page'
+        )[i]
+        const children = pageElement ? Array.from(pageElement.children) : []
+        const [canvas, div1, div2] = children as [
+          HTMLCanvasElement,
+          HTMLDivElement,
+          HTMLDivElement,
+        ]
+
+        const viewWidth = page.view?.[2]! - page.view?.[0]!
+        const viewHeight = page.view?.[3]! - page.view?.[1]!
 
         const isTransposed = !!((pageRotation / 90) % 2)
-        const viewWidth = page.view[2] - page.view[0]
-        const viewHeight = page.view[3] - page.view[1]
+
         const [actualWidth, actualHeight] = getPageDimensions(
           isTransposed ? viewWidth / viewHeight : viewHeight / viewWidth
         )
@@ -406,7 +416,6 @@ onBeforeUnmount(() => {
 
 defineExpose({ doc, download, print })
 </script>
-
 <template>
   <div :id="id" ref="root" class="vue-pdf-embed">
     <div v-for="(pageNum, i) in pageNums" :key="pageNum">
