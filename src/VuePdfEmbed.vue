@@ -180,26 +180,25 @@ const print = async (dpi = 600, filename = '', allPages = false) => {
       const pageNum = pagesToPrint[i]
       if (pageNum == null) continue
       const page = await doc.value.getPage(pageNum)
-      const viewport = page.getViewport({ scale: 1, rotation: 0 })
 
-      if (i === 0) {
-        const styleWidth = (viewport.width * printUnits) / styleUnits
-        const styleHeight = (viewport.height * printUnits) / styleUnits
-        const style = iframe.contentDocument!.createElement('style')
-        style.textContent = `@page { size: ${styleWidth}px ${styleHeight}px; margin:0; }`
-        iframe.contentDocument!.head.appendChild(style)
-      }
-
+      const viewport = page.getViewport({ scale: printUnits })
       const canvas = document.createElement('canvas')
-      canvas.width = viewport.width * printUnits
-      canvas.height = viewport.height * printUnits
+      canvas.width = viewport.width
+      canvas.height = viewport.height
       const ctx = canvas.getContext('2d')!
+
       await page.render({
         canvasContext: ctx,
-        intent: 'print',
-        transform: [printUnits, 0, 0, printUnits, 0, 0],
         viewport,
+        intent: 'print',
       }).promise
+
+// CSS @page nach Canvas erzeugen (erst nach Canvas verfügbar)
+      if (i === 0) {
+        const style = iframe.contentDocument!.createElement('style')
+        style.textContent = `@page { size: ${canvas.width}px ${canvas.height}px; margin:0; }`
+        iframe.contentDocument!.head.appendChild(style)
+      }
 
       iframe.contentDocument!.body.appendChild(canvas)
     }
